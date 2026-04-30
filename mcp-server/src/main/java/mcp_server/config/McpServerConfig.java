@@ -11,6 +11,8 @@ import mcp_server.dto.StoreListResponse;
 import mcp_server.tool.GongGongNuriTools;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import mcp_server.auth.ApiKeyContext;
+import mcp_server.auth.AuthenticatedClient;
 
 import java.time.Duration;
 import java.util.List;
@@ -44,7 +46,23 @@ public class McpServerConfig {
                 .requestTimeout(Duration.ofSeconds(10))
                 .strictToolNameValidation(true)
                 .toolCall(getStoreListTool, (exchange, request) -> {
-                    try {
+                try {
+                        AuthenticatedClient client = ApiKeyContext.get();
+
+                        if (client == null) {
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent("인증 정보가 없습니다.")
+                                .isError(true)
+                                .build();
+                        }
+
+                        if (!client.canCallTool("getStoreList")) {
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent("FORBIDDEN_TOOL: 이 API Key는 getStoreList Tool을 호출할 권한이 없습니다.")
+                                .isError(true)
+                                .build();
+                        }
+
                         Map<String, Object> args = request.arguments();
 
                         StoreListResponse response = gongGongNuriTools.getStoreList(
@@ -66,12 +84,12 @@ public class McpServerConfig {
                                 .isError(false)
                                 .build();
 
-                    } catch (Exception e) {
+                } catch (Exception e) {
                         return McpSchema.CallToolResult.builder()
                                 .addTextContent("getStoreList 호출 실패: " + e.getMessage())
                                 .isError(true)
                                 .build();
-                    }
+                }
                 })
                 .build();
     }

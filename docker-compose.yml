@@ -1,0 +1,6 @@
+services:
+  redis:
+    image: redis:8.6
+    container_name: mcp-lab-redis
+    ports:
+      - "6379:6379"
