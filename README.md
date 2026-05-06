@@ -782,3 +782,76 @@ Rocky Linux 서버에서 Podman pod 기반으로 Redis + MCP Server를 실행하
 1. Gateway 연결
 2. red teaming 준비
 ```
+
+
+## Local애서 돌릴 때 해야하는 것
+```bash
+docker rm -f mcp-lab-redis
+docker rm -f mcp-lab-mcp-server
+docker rm -f mcp-lab-agentgateway
+```
+
+```bash
+docker run -d \
+  --name mcp-lab-redis \
+  --network mcp-lab-net \
+  -p 6379:6379 \
+  redis:8.6
+```
+
+```bash
+docker ps
+```
+
+```bash
+docker exec -it mcp-lab-redis redis-cli PING
+``` PONG
+
+```bash
+docker exec -it mcp-lab-redis redis-cli
+```
+
+```redis
+SET api-key:local-redteam-key '{"apiKey":"local-redteam-key","clientId":"local-redteam-client","status":"ACTIVE","allowedTools":["getStoreList"]}'
+SET api-key:blocked-key '{"apiKey":"blocked-key","clientId":"blocked-client","status":"ACTIVE","allowedTools":[]}'
+SET api-key:inactive-key '{"apiKey":"inactive-key","clientId":"inactive-client","status":"INACTIVE","allowedTools":["getStoreList"]}'
+GET api-key:local-redteam-key
+exit
+```
+
+```bash
+docker build -t mcp-lab-server:local .
+
+docker run -d \
+  --name mcp-lab-mcp-server \
+  --network mcp-lab-net \
+  -p 8080:8080 \
+  -e SPRING_DATA_REDIS_HOST=mcp-lab-redis \
+  -e SPRING_DATA_REDIS_PORT=6379 \
+  -e REDIS_HOST=mcp-lab-redis \
+  -e REDIS_PORT=6379 \
+  mcp-lab-server:local
+  ```
+
+
+```bash
+docker run -d \
+  --name mcp-lab-agentgateway \
+  --network mcp-lab-net \
+  -p 8081:8081 \
+  -p 127.0.0.1:15000:15000 \
+  -e ADMIN_ADDR=0.0.0.0:15000 \
+  -v ~/mcp-lab/agentgateway/agentgateway.yaml:/etc/agentgateway/agentgateway.yaml:ro \
+  cr.agentgateway.dev/agentgateway:v1.0.1 \
+  -f /etc/agentgateway/agentgateway.yaml
+  ```
+
+최종 확인
+```bash
+curl -i -X POST http://localhost:8081/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "MCP-Protocol-Version: 2025-06-18" \
+  -H "X-API-Key: local-redteam-key" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-gateway-test","version":"0.0.1"}}}'
+  ```
