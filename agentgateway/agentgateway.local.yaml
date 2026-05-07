@@ -1,0 +1,35 @@
+binds:
+- port: 8081
+  listeners:
+  - routes:
+    - name: mcp-with-api-key
+      matches:
+      - path:
+          pathPrefix: /mcp
+        headers:
+        - name: x-api-key
+          value:
+            regex: ".+"
+      policies:
+        cors:
+          allowOrigins:
+          - "*"
+          allowHeaders:
+          - "*"
+          exposeHeaders:
+          - "Mcp-Session-Id"
+      backends:
+      - mcp:
+          targets:
+          - name: gongnuri-mcp-server
+            mcp:
+              host: http://mcp-lab-mcp-server:8080/mcp
+
+    - name: mcp-missing-api-key
+      matches:
+      - path:
+          pathPrefix: /mcp
+      policies:
+        directResponse:
+          status: 401
+          body: '{"error":{"code":"MISSING_API_KEY","message":"X-API-Key header is required at gateway."}}'
