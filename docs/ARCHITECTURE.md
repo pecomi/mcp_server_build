@@ -2,6 +2,71 @@
 
 새 환경 (`airlab/mcp_server_build/`) 의 컴포넌트 구성·네트워크·메시지 흐름·신뢰 경계 명세. 학위논문 figure 원본으로도 활용.
 
+## 0. 전체 구조 (Mermaid)
+
+```mermaid
+flowchart TB
+  User((Caller))
+
+  subgraph Z1["Zone: lab-public"]
+    Demo[Web Demo<br/>React + proxy<br/>:8090]
+    Host[Host Orchestrator<br/>Mock / Poisoned / CrossPoisoned / Real<br/>:8085]
+  end
+
+  Gateway[Agentgateway 1.0.1<br/>X-API-Key edge filter<br/>:8081<br/>spans both zones]
+
+  subgraph Z2["Zone: lab-internal (mcp-lab-net)"]
+    M1[mcp-server<br/>Eshare tools<br/>:8080]
+    M2[fs-server<br/>read_file<br/>:8084]
+    M3[research-server<br/>lookup_term<br/>:8086]
+    Mock[mock-backend<br/>/stores<br/>:8083]
+    Auth[(Redis<br/>:6379)]
+    Scanner[Scanner<br/>DESC_INJECT + ARG_NO_PATTERN<br/>:8087]
+  end
+
+  subgraph Obs["Observability"]
+    Prom[Prometheus<br/>:9090]
+    Graf[Grafana<br/>:3000]
+    OTel[OTel Collector<br/>:4317/4318]
+    Jaeger[Jaeger<br/>:16686]
+  end
+
+  User -->|HTTPS| Demo
+  Demo -->|/api/chat| Host
+  Demo -.->|/api/traces| Jaeger
+  Demo -.->|/api/scan| Scanner
+
+  Host -->|MCP Streamable HTTP| Gateway
+  Gateway --> M1
+  Gateway --> M2
+  Gateway --> M3
+
+  M1 -->|REST| Mock
+  M1 -.ACL lookup.-> Auth
+  Gateway -.X-API-Key existence.-> Auth
+  Scanner -.tools/list federated.-> Gateway
+
+  Host -.OTLP.-> OTel
+  M1 -.OTLP.-> OTel
+  M2 -.OTLP.-> OTel
+  M3 -.OTLP.-> OTel
+  Mock -.OTLP.-> OTel
+  Scanner -.OTLP.-> OTel
+  Demo -.OTLP.-> OTel
+  OTel --> Jaeger
+
+  Prom -.scrape /actuator/prometheus.-> Host
+  Prom -.scrape.-> M1
+  Prom -.scrape.-> M2
+  Prom -.scrape.-> M3
+  Prom -.scrape.-> Mock
+  Prom -.scrape.-> Scanner
+  Prom -.scrape.-> Demo
+  Graf -->|datasource| Prom
+```
+
+> 공격 흐름(RT-002 / RT-003) sequence diagram은 [`docs/RT-002.md`](RT-002.md) / [`docs/RT-003.md`](RT-003.md) 안에 별도.
+
 ## 1. 서비스 구성 (5)
 
 | 서비스 | 이미지 | 호스트 포트 | 내부 포트 | 역할 |
@@ -14,47 +79,9 @@
 
 ## 2. 네트워크 (2-zone)
 
-```
-                 +----------------------+
-                 |   lab-public         |
-                 |   (mcp-lab-public)   |
-                 |                      |
-                 |  +-------------+     |
-   citizen --→   |  | host        |     |
-                 |  | :8085       |     |
-                 |  +-----+-------+     |
-                 |        |             |
-                 |  +-----+--------+    |
-                 |  | gateway      |    |
-                 |  | :8081 (ext)  |    |
-                 |  +-----+--------+    |
-                 +--------|-------------+
-                          |
-                 +--------|-------------------------+
-                 |        |       lab-internal     |
-                 |        |       (mcp-lab-net)    |
-                 |  +-----+--------+               |
-                 |  | gateway      |               |
-                 |  | (int side)   |               |
-                 |  +-----+--------+               |
-                 |        |                        |
-                 |  +-----+--------+               |
-                 |  | mcp-server   |               |
-                 |  | :8080        |               |
-                 |  +--+--------+--+               |
-                 |     |        |                  |
-                 |     v        v                  |
-                 |  +-----+  +---------+           |
-                 |  |redis|  |mock-    |           |
-                 |  |:6379|  |backend  |           |
-                 |  +-----+  |:8083    |           |
-                 |           +---------+           |
-                 +---------------------------------+
-```
-
-- **`lab-public`** (`mcp-lab-public`): caller-facing zone. host + gateway 외부 인터페이스.
-- **`lab-internal`** (`mcp-lab-net`, external network): backend zone. redis · mock-backend · mcp-server · gateway 내부 인터페이스.
-- gateway만 두 zone 양다리.
+- **`lab-public`** (`mcp-lab-public`): caller-facing zone. host · gateway 외부 인터페이스 · web-demo.
+- **`lab-internal`** (`mcp-lab-net`, external network): backend zone. redis · mock-backend · mcp-server · fs-server · research-server · scanner · gateway 내부 인터페이스.
+- gateway가 두 zone 양다리. observability 스택(Prometheus·Grafana·OTel Collector·Jaeger)도 양쪽 attach해 어디서든 scrape/UI 접근.
 - 모든 서비스 포트는 host 머신(WSL)에도 publish — verify 스크립트가 localhost로 직접 hit 가능.
 
 `lab-internal`이 `mcp-lab-net` 이름인 이유: 마일스톤 초기 (M0' 이전) 수동 `docker network create mcp-lab-net`으로 생성됐고, 기존 verify·rt 스크립트의 `--network mcp-lab-net` 호환 유지.
@@ -158,14 +185,49 @@ mcp_server_build/
 ├── agentgateway/                # gateway config (M0' 합류)
 │   └── agentgateway.local.yaml             # X-API-Key 게이트
 │
-├── scripts/                     # 검증 스크립트
+├── scripts/                     # 검증 스크립트 (§7 참조)
 │   ├── verify-m1.sh             # M1' DoD
 │   ├── verify-m1-5.sh           # M1.5 DoD
 │   ├── verify-m2-5.sh           # M2.5 DoD
 │   ├── verify-m3p.sh            # M3' DoD
-│   ├── verify-m0p.sh            # M0' DoD
-│   ├── rt-002-stage1.sh         # RT-002 Stage 1 PoC
-│   └── test-local-gateway-auth.sh
+│   ├── verify-m0p.sh            # M0' DoD (통합 E2E)
+│   ├── verify-m6.sh             # M6 fs-server + federation
+│   ├── verify-m7.sh             # M7 research-server + 3-target federation
+│   ├── verify-m9.sh             # M9 scanner MVP
+│   ├── verify-m11.sh            # M11 prom + grafana metrics
+│   ├── verify-m11-5.sh          # M11.5 tracing
+│   ├── verify-m12.sh            # M12 real LLM (SKIP if no key)
+│   ├── verify-bt-001.sh         # BT-001 backend authz + RT-002 integration
+│   ├── rt-002-stage1.sh         # RT-002 Stage 1 PoC (single-server)
+│   ├── rt-003-stage1.sh         # RT-003 Stage 1 PoC (cross-server)
+│   └── test-local-gateway-auth.sh   # gateway 5-case raw 검증 (수동)
 │
-└── docs/                        # 본 문서 + RT-xxx 보고서
+├── monitoring/                  # prometheus + grafana provisioning + otel collector
+├── web-demo/                    # P1+P2 — React frontend + Spring Boot proxy backend
+├── fs-server/                   # M6 — read_file sink server
+├── research-server/             # M7 — lookup_term vehicle server (env-controllable description)
+├── scanner/                     # M9 — Findings reporter
+└── docs/                        # 본 문서 + RT/BT 보고서
 ```
+
+## 7. Verify Script Matrix
+
+각 verify 스크립트의 대상 컨테이너 / 검증 layer / 케이스 수 일람.
+
+| Script | Target Containers | Layer / 검증 대상 | Cases |
+|---|---|---|---|
+| `verify-m1.sh` | mock-backend 직접 | M1' — unauth IDOR sink + Bearer secure 쌍 | 5 |
+| `verify-m1-5.sh` | mock-backend + mcp-server 직접 | M1.5 — `/stores` 리스트 필터 + Eshare 어댑터 HTTP 재배선 | 4 |
+| `verify-m2-5.sh` | mcp-server 직접 (`tools/call getStoreDetail`) | M2.5 — 두 번째 tool + IDOR sink 도달성 | 4 |
+| `verify-m3p.sh` | host `POST /run` | M3' — Mock LLM + 3 smoke 시나리오 + 400 회귀 | 3 |
+| `verify-m0p.sh` | 전체 stack (5 health + 4-hop E2E) | M0' — 통합 compose + gateway 4-hop chain | 9 |
+| `verify-m6.sh` | gateway tools/list + host (smoke-readfile) | M6 — fs-server + 2-target federation | 4 |
+| `verify-m7.sh` | gateway tools/list + host (smoke-lookup) | M7 — research-server + 3-target federation | 4 |
+| `verify-m9.sh` | scanner `/scan` | M9 — DESC_INJECT + ARG_NO_PATTERN 룰 | 4 |
+| `verify-m11.sh` | Prometheus + Grafana API | M11 — 6 jobs scrape + jvm metric + datasource | 5 |
+| `verify-m11-5.sh` | otel-collector + Jaeger API (+ trigger /run) | M11.5 — OTLP trace flush + service 등록 | 4 |
+| `verify-m12.sh` | host (LLM_MODE=real_deterministic) | M12 — Anthropic Messages API 호출 (key 없으면 SKIP) | 3 |
+| `rt-002-stage1.sh` | mcp-server + host 재기동 × 3 env 조합 | RT-002 — S/H 플래그 매트릭스 (baseline / 방어 / 공격) | 3 |
+| `rt-003-stage1.sh` | research-server + host + gateway 재기동 | RT-003 — cross-server S/H 플래그 매트릭스 | 3 |
+| `verify-bt-001.sh` | mock-backend BT 토글 + RT-002 통합 | BT-001 — restricted-row 게이팅 + RT-002 차단 시연 | 4 |
+| `test-local-gateway-auth.sh` | gateway 5-case (no key / inactive / valid / blocked) | M4+M5 — gateway 인증 raw 확인 (manual) | 5 |
