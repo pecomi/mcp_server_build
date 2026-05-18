@@ -1,6 +1,7 @@
 package mcp_server.tool;
 
-import mcp_server.adapter.MockGongGongNuriApiClient;
+import mcp_server.adapter.EshareApiClient;
+import mcp_server.dto.StoreDetail;
 import mcp_server.dto.StoreListRequest;
 import mcp_server.dto.StoreListResponse;
 import mcp_server.validation.StoreListValidator;
@@ -9,16 +10,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
-public class GongGongNuriTools {
+public class EshareTools {
 
-    private static final Logger log = LoggerFactory.getLogger(GongGongNuriTools.class);
+    private static final Logger log = LoggerFactory.getLogger(EshareTools.class);
 
     private final StoreListValidator validator;
-    private final MockGongGongNuriApiClient apiClient;
+    private final EshareApiClient apiClient;
 
-    public GongGongNuriTools(
+    public EshareTools(
             StoreListValidator validator,
-            MockGongGongNuriApiClient apiClient
+            EshareApiClient apiClient
     ) {
         this.validator = validator;
         this.apiClient = apiClient;
@@ -50,5 +51,15 @@ public class GongGongNuriTools {
         validator.validate(request);
 
         return apiClient.getStores(request);
+    }
+
+    public StoreDetail getStoreDetail(String storeId) {
+        if (storeId == null || storeId.isBlank()) {
+            throw new IllegalArgumentException("store_id는 필수입니다.");
+        }
+
+        log.info("getStoreDetail called. storeId={}", storeId);
+
+        return apiClient.getStoreById(storeId);
     }
 }

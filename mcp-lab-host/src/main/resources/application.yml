@@ -1,0 +1,37 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: mcp-lab-host
+
+host:
+  llm:
+    mode: ${LLM_MODE:mock}
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      model: ${ANTHROPIC_MODEL:claude-sonnet-4-5}
+      url: ${ANTHROPIC_URL:https://api.anthropic.com/v1/messages}
+  mcp:
+    server-url: ${MCP_SERVER_URL:http://mcp-lab-mcp-server:8080/mcp}
+    api-key: ${MCP_API_KEY:local-redteam-key}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://mcp-lab-otel-collector:4318/v1/traces}
+
+logging:
+  level:
+    root: INFO
+    host: DEBUG

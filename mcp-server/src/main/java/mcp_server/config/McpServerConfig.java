@@ -1,14 +1,15 @@
 package mcp_server.config;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import mcp_server.dto.StoreDetail;
 import mcp_server.dto.StoreListResponse;
-import mcp_server.tool.GongGongNuriTools;
+import mcp_server.tool.EshareTools;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -20,6 +21,9 @@ import java.util.Map;
 public class McpServerConfig {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${mcp.tool.getstoredetail.description:주어진 store_id에 해당하는 시설 상세 정보를 반환한다.}")
+    private String getStoreDetailDescription;
 
     @Bean
     public HttpServletStreamableServerTransportProvider mcpStreamableTransportProvider() {
@@ -34,9 +38,10 @@ public class McpServerConfig {
     @Bean
     public McpSyncServer mcpSyncServer(
             HttpServletStreamableServerTransportProvider transportProvider,
-            GongGongNuriTools gongGongNuriTools
+            EshareTools eshareTools
     ) {
         McpSchema.Tool getStoreListTool = createGetStoreListTool();
+        McpSchema.Tool getStoreDetailTool = createGetStoreDetailTool();
 
         return McpServer.sync(transportProvider)
                 .serverInfo("mcp-lab-server", "0.0.1")
@@ -44,26 +49,10 @@ public class McpServerConfig {
                 .requestTimeout(Duration.ofSeconds(10))
                 .strictToolNameValidation(true)
                 .toolCall(getStoreListTool, (exchange, request) -> {
-                try {
-                        // AuthenticatedClient client = ApiKeyContext.get();
-
-                        // if (client == null) {
-                        // return McpSchema.CallToolResult.builder()
-                        //         .addTextContent("인증 정보가 없습니다.")
-                        //         .isError(true)
-                        //         .build();
-                        // }
-
-                        // if (!client.canCallTool("getStoreList")) {
-                        // return McpSchema.CallToolResult.builder()
-                        //         .addTextContent("FORBIDDEN_TOOL: 이 API Key는 getStoreList Tool을 호출할 권한이 없습니다.")
-                        //         .isError(true)
-                        //         .build();
-                        // }
-
+                    try {
                         Map<String, Object> args = request.arguments();
 
-                        StoreListResponse response = gongGongNuriTools.getStoreList(
+                        StoreListResponse response = eshareTools.getStoreList(
                                 toInteger(args.get("page")),
                                 toInteger(args.get("size")),
                                 toStringValue(args.get("consumerCd")),
@@ -82,12 +71,35 @@ public class McpServerConfig {
                                 .isError(false)
                                 .build();
 
-                } catch (Exception e) {
+                    } catch (Exception e) {
                         return McpSchema.CallToolResult.builder()
                                 .addTextContent("getStoreList 호출 실패: " + e.getMessage())
                                 .isError(true)
                                 .build();
-                }
+                    }
+                })
+                .toolCall(getStoreDetailTool, (exchange, request) -> {
+                    try {
+                        Map<String, Object> args = request.arguments();
+
+                        StoreDetail response = eshareTools.getStoreDetail(
+                                toStringValue(args.get("store_id"))
+                        );
+
+                        String responseJson = objectMapper.writeValueAsString(response);
+
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent(responseJson)
+                                .structuredContent(response)
+                                .isError(false)
+                                .build();
+
+                    } catch (Exception e) {
+                        return McpSchema.CallToolResult.builder()
+                                .addTextContent("getStoreDetail 호출 실패: " + e.getMessage())
+                                .isError(true)
+                                .build();
+                    }
                 })
                 .build();
     }
@@ -145,6 +157,33 @@ public class McpServerConfig {
                 "object",
                 properties,
                 List.of("page", "size", "consumerCd"),
+                false,
+                null,
+                null
+        );
+    }
+
+    private McpSchema.Tool createGetStoreDetailTool() {
+        return McpSchema.Tool.builder()
+                .name("getStoreDetail")
+                .title("공유누리 시설 단건 조회")
+                .description(getStoreDetailDescription)
+                .inputSchema(createGetStoreDetailInputSchema())
+                .build();
+    }
+
+    private McpSchema.JsonSchema createGetStoreDetailInputSchema() {
+        Map<String, Object> properties = Map.of(
+                "store_id", Map.of(
+                        "type", "string",
+                        "description", "시설 식별자."
+                )
+        );
+
+        return new McpSchema.JsonSchema(
+                "object",
+                properties,
+                List.of("store_id"),
                 false,
                 null,
                 null

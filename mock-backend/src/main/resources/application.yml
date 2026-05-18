@@ -1,0 +1,27 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: mock-backend
+
+bt:
+  backend-authz:
+    enabled: ${BT_BACKEND_AUTHZ_ENABLED:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://mcp-lab-otel-collector:4318/v1/traces}
+
+logging:
+  level:
+    root: INFO
+    mock_backend: DEBUG
