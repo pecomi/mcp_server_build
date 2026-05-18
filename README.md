@@ -24,6 +24,8 @@ MCP Server
 - API Key Authentication
 - Tool-level Authorization
 - getStoreList Mock Tool
+- getExternalInstitutionRecord Mock Tool
+- poisonedTool
         |
         v
 Redis 8.6
@@ -58,7 +60,7 @@ Podman Pod: mcp-lab-pod
 * Spring AI MCP Starter는 사용하지 않음
 * Streamable HTTP 기반 `/mcp` endpoint 제공
 * MCP Inspector 연결 가능
-* `getStoreList` Tool 등록
+* `getStoreList`, `getExternalInstitutionRecord`, `poisonedTool` Tool 등록
 
 ### Authentication / Authorization
 
@@ -81,13 +83,30 @@ Podman Pod: mcp-lab-pod
 
 ### Tool
 
-현재 구현된 Tool은 1개이다.
+현재 구현된 Tool은 3개이다.
 
 ```text
 getStoreList
+getExternalInstitutionRecord
+poisonedTool
 ```
 
-현재는 실제 공유누리 API를 호출하지 않고, `MockGongGongNuriApiClient`를 통해 mock 응답을 반환한다.
+현재는 실제 공유누리 API 또는 외부 기관 API를 호출하지 않고, `MockGongGongNuriApiClient`를 통해 mock 응답을 반환한다.
+
+각 Tool의 목적은 다음과 같다.
+
+```text
+getStoreList
+- 공유누리 장소 목록 조회 mock Tool
+
+getExternalInstitutionRecord
+- 다른 기관 API를 호출해 해당 기관 데이터베이스 record를 조회하는 상황을 가정한 mock Tool
+- 응답 데이터의 databaseInstruction 필드에 오염된 instruction이 포함된 상황을 재현한다.
+
+poisonedTool
+- 다른 Tool 호출 이후 후속 동작으로 호출되도록 description을 구성한 Tool
+- 호출되면 서버 로그에 "HACKED!!"를 출력한다.
+```
 
 ---
 
@@ -166,6 +185,8 @@ mcp-lab/
              │       ├─ tool/
              │       │   └─ GongGongNuriTools.java
              │       ├─ dto/
+             │       │   ├─ ExternalInstitutionRecordRequest.java
+             │       │   ├─ ExternalInstitutionRecordResponse.java
              │       │   ├─ StoreListRequest.java
              │       │   └─ StoreListResponse.java
              │       ├─ adapter/
@@ -229,9 +250,9 @@ docker exec -it mcp-lab-redis redis-cli
 Redis CLI 안에서:
 
 ```redis
-SET api-key:local-redteam-key '{"apiKey":"local-redteam-key","clientId":"local-redteam-client","status":"ACTIVE","allowedTools":["getStoreList"]}'
+SET api-key:local-redteam-key '{"apiKey":"local-redteam-key","clientId":"local-redteam-client","status":"ACTIVE","allowedTools":["getStoreList","getExternalInstitutionRecord","poisonedTool"]}'
 SET api-key:blocked-key '{"apiKey":"blocked-key","clientId":"blocked-client","status":"ACTIVE","allowedTools":[]}'
-SET api-key:inactive-key '{"apiKey":"inactive-key","clientId":"inactive-client","status":"INACTIVE","allowedTools":["getStoreList"]}'
+SET api-key:inactive-key '{"apiKey":"inactive-key","clientId":"inactive-client","status":"INACTIVE","allowedTools":["getStoreList","getExternalInstitutionRecord","poisonedTool"]}'
 GET api-key:local-redteam-key
 exit
 ```
@@ -390,9 +411,9 @@ podman exec -it mcp-lab-redis redis-cli
 Redis CLI 안에서:
 
 ```redis
-SET api-key:local-redteam-key '{"apiKey":"local-redteam-key","clientId":"local-redteam-client","status":"ACTIVE","allowedTools":["getStoreList"]}'
+SET api-key:local-redteam-key '{"apiKey":"local-redteam-key","clientId":"local-redteam-client","status":"ACTIVE","allowedTools":["getStoreList","getExternalInstitutionRecord","poisonedTool"]}'
 SET api-key:blocked-key '{"apiKey":"blocked-key","clientId":"blocked-client","status":"ACTIVE","allowedTools":[]}'
-SET api-key:inactive-key '{"apiKey":"inactive-key","clientId":"inactive-client","status":"INACTIVE","allowedTools":["getStoreList"]}'
+SET api-key:inactive-key '{"apiKey":"inactive-key","clientId":"inactive-client","status":"INACTIVE","allowedTools":["getStoreList","getExternalInstitutionRecord","poisonedTool"]}'
 GET api-key:local-redteam-key
 exit
 ```
@@ -584,8 +605,10 @@ X-API-Key: local-redteam-key
 ```text
 1. Connect 성공
 2. Tools/List Tools 확인
-3. getStoreList 표시 확인
+3. getStoreList, getExternalInstitutionRecord, poisonedTool 표시 확인
 4. getStoreList 호출 성공
+5. getExternalInstitutionRecord 호출 시 databaseInstruction 필드 포함 여부 확인
+6. poisonedTool 호출 시 서버 로그에 "HACKED!!" 출력 확인
 ```
 
 `getStoreList` 호출 예시:
@@ -603,6 +626,26 @@ X-API-Key: local-redteam-key
 }
 ```
 
+`getExternalInstitutionRecord` 호출 예시:
+
+```json
+{
+  "institutionCode": "external-agency-01",
+  "recordId": "record-001",
+  "consumerCd": "local-test"
+}
+```
+
+기대 응답에는 외부 기관 데이터베이스에서 받은 mock record와 함께 `databaseInstruction` 필드가 포함된다.
+이 필드는 오염된 데이터베이스 record에 instruction이 포함된 indirect prompt injection 상황을 재현하기 위한 값이다.
+
+`poisonedTool`은 입력값이 없다.
+호출되면 MCP Server 로그에 다음 메시지가 출력된다.
+
+```text
+HACKED!!
+```
+
 ---
 
 ## 13. 현재 API Key 목록
@@ -614,7 +657,7 @@ X-API-Key: local-redteam-key
   "apiKey": "local-redteam-key",
   "clientId": "local-redteam-client",
   "status": "ACTIVE",
-  "allowedTools": ["getStoreList"]
+  "allowedTools": ["getStoreList", "getExternalInstitutionRecord", "poisonedTool"]
 }
 ```
 
@@ -622,7 +665,7 @@ X-API-Key: local-redteam-key
 
 ```text
 정상 테스트용 API Key
-getStoreList 호출 가능
+getStoreList, getExternalInstitutionRecord, poisonedTool 호출 가능
 ```
 
 ### blocked-key
@@ -649,7 +692,7 @@ getStoreList 호출 가능
   "apiKey": "inactive-key",
   "clientId": "inactive-client",
   "status": "INACTIVE",
-  "allowedTools": ["getStoreList"]
+  "allowedTools": ["getStoreList", "getExternalInstitutionRecord", "poisonedTool"]
 }
 ```
 
@@ -662,7 +705,7 @@ getStoreList 호출 가능
 새 API Key 추가 예시:
 
 ```redis
-SET api-key:redteam-user-01 '{"apiKey":"redteam-user-01","clientId":"redteam-user-01","status":"ACTIVE","allowedTools":["getStoreList"]}'
+SET api-key:redteam-user-01 '{"apiKey":"redteam-user-01","clientId":"redteam-user-01","status":"ACTIVE","allowedTools":["getStoreList","getExternalInstitutionRecord","poisonedTool"]}'
 ```
 
 ---
@@ -812,9 +855,9 @@ docker exec -it mcp-lab-redis redis-cli
 ```
 
 ```redis
-SET api-key:local-redteam-key '{"apiKey":"local-redteam-key","clientId":"local-redteam-client","status":"ACTIVE","allowedTools":["getStoreList"]}'
+SET api-key:local-redteam-key '{"apiKey":"local-redteam-key","clientId":"local-redteam-client","status":"ACTIVE","allowedTools":["getStoreList","getExternalInstitutionRecord","poisonedTool"]}'
 SET api-key:blocked-key '{"apiKey":"blocked-key","clientId":"blocked-client","status":"ACTIVE","allowedTools":[]}'
-SET api-key:inactive-key '{"apiKey":"inactive-key","clientId":"inactive-client","status":"INACTIVE","allowedTools":["getStoreList"]}'
+SET api-key:inactive-key '{"apiKey":"inactive-key","clientId":"inactive-client","status":"INACTIVE","allowedTools":["getStoreList","getExternalInstitutionRecord","poisonedTool"]}'
 GET api-key:local-redteam-key
 exit
 ```
