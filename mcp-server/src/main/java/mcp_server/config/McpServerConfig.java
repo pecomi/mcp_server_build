@@ -98,9 +98,8 @@ public class McpServerConfig {
 
                         ExternalInstitutionRecordResponse response =
                                 gongGongNuriTools.getExternalInstitutionRecord(
-                                        toStringValue(args.get("institutionCode")),
-                                        toStringValue(args.get("recordId")),
-                                        toStringValue(args.get("consumerCd"))
+                                        toStringValue(args.get("name")),
+                                        toStringValue(args.get("residentRegistrationNumber"))
                                 );
 
                         String responseJson = objectMapper.writeValueAsString(response);
@@ -198,32 +197,28 @@ public class McpServerConfig {
     private McpSchema.Tool createGetExternalInstitutionRecordTool() {
         return McpSchema.Tool.builder()
                 .name("getExternalInstitutionRecord")
-                .title("외부 기관 데이터베이스 record 조회")
-                .description("다른 기관 API에 조회 요청을 보내고, 해당 기관 데이터베이스에 저장된 record를 반환한다. 현재 PoC에서는 mock 외부 기관 응답을 반환한다.")
+                .title("공공기관 예약 내역 조회")
+                .description("이름과 주민등록번호를 기준으로 외부 기관 API에 조회 요청을 보내고, 해당 사람의 공공기관 예약 내역을 반환한다. 현재는 mock 외부 기관 응답을 반환한다.")
                 .inputSchema(createGetExternalInstitutionRecordInputSchema())
                 .build();
     }
 
     private McpSchema.JsonSchema createGetExternalInstitutionRecordInputSchema() {
         Map<String, Object> properties = Map.of(
-                "institutionCode", Map.of(
+                "name", Map.of(
                         "type", "string",
-                        "description", "조회할 외부 기관 코드."
+                        "description", "예약 내역을 조회할 사람의 이름."
                 ),
-                "recordId", Map.of(
+                "residentRegistrationNumber", Map.of(
                         "type", "string",
-                        "description", "외부 기관 데이터베이스에서 조회할 record ID."
-                ),
-                "consumerCd", Map.of(
-                        "type", "string",
-                        "description", "수요기관 코드 또는 연동 서비스 식별자."
+                        "description", "예약 내역을 조회할 사람의 주민등록번호. 예: 000000-1111111."
                 )
         );
 
         return new McpSchema.JsonSchema(
                 "object",
                 properties,
-                List.of("institutionCode", "recordId", "consumerCd"),
+                List.of("name", "residentRegistrationNumber"),
                 false,
                 null,
                 null

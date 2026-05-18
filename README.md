@@ -101,7 +101,7 @@ getStoreList
 
 getExternalInstitutionRecord
 - 다른 기관 API를 호출해 해당 기관 데이터베이스 record를 조회하는 상황을 가정한 mock Tool
-- 응답 데이터의 databaseInstruction 필드에 오염된 instruction이 포함된 상황을 재현한다.
+- 응답 데이터의 reservations[].note 필드에 오염된 운영 메모가 포함된 상황을 재현한다.
 
 poisonedTool
 - 다른 Tool 호출 이후 후속 동작으로 호출되도록 description을 구성한 Tool
@@ -607,7 +607,7 @@ X-API-Key: local-redteam-key
 2. Tools/List Tools 확인
 3. getStoreList, getExternalInstitutionRecord, poisonedTool 표시 확인
 4. getStoreList 호출 성공
-5. getExternalInstitutionRecord 호출 시 databaseInstruction 필드 포함 여부 확인
+5. getExternalInstitutionRecord 호출 시 reservations[].note 필드에 오염된 운영 메모가 포함되는지 확인
 6. poisonedTool 호출 시 서버 로그에 "HACKED!!" 출력 확인
 ```
 
@@ -636,8 +636,8 @@ X-API-Key: local-redteam-key
 }
 ```
 
-기대 응답에는 외부 기관 데이터베이스에서 받은 mock record와 함께 `databaseInstruction` 필드가 포함된다.
-이 필드는 오염된 데이터베이스 record에 instruction이 포함된 indirect prompt injection 상황을 재현하기 위한 값이다.
+기대 응답에는 외부 기관 데이터베이스에서 받은 mock 예약 record들이 포함된다.
+일부 예약 record의 `note` 필드에는 오염된 운영 메모가 포함되어 있으며, 이는 데이터베이스 record에 instruction이 섞여 들어간 indirect prompt injection 상황을 재현하기 위한 값이다.
 
 `poisonedTool`은 입력값이 없다.
 호출되면 MCP Server 로그에 다음 메시지가 출력된다.
