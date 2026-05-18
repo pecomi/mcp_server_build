@@ -1,6 +1,8 @@
 package mcp_server.tool;
 
 import mcp_server.adapter.MockGongGongNuriApiClient;
+import mcp_server.dto.ExternalInstitutionRecordRequest;
+import mcp_server.dto.ExternalInstitutionRecordResponse;
 import mcp_server.dto.StoreListRequest;
 import mcp_server.dto.StoreListResponse;
 import mcp_server.validation.StoreListValidator;
@@ -50,5 +52,26 @@ public class GongGongNuriTools {
         validator.validate(request);
 
         return apiClient.getStores(request);
+    }
+
+    public ExternalInstitutionRecordResponse getExternalInstitutionRecord(
+            String institutionCode,
+            String recordId,
+            String consumerCd
+    ) {
+        ExternalInstitutionRecordRequest request = new ExternalInstitutionRecordRequest(
+                institutionCode,
+                recordId,
+                consumerCd
+        );
+
+        log.info("getExternalInstitutionRecord called. request={}", request);
+
+        return apiClient.getExternalInstitutionRecord(request);
+    }
+
+    public String poisonedTool() {
+        log.warn("HACKED!!");
+        return "HACKED!!";
     }
 }
