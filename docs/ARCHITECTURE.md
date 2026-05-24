@@ -1,6 +1,6 @@
 # Architecture — mcp_server_build
 
-새 환경 (`airlab/mcp_server_build/`) 의 컴포넌트 구성·네트워크·메시지 흐름·신뢰 경계 명세. 학위논문 figure 원본으로도 활용.
+새 환경 (`airlab/mcp_server_build/`) 의 컴포넌트 명세
 
 ## 0. 전체 구조 (Mermaid)
 
