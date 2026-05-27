@@ -13,4 +13,29 @@ public interface LlmClient {
     default List<LlmDecision> decideMultiStep(String prompt, String scenarioId, List<ToolDescriptor> availableTools) {
         return List.of(decide(prompt, scenarioId, availableTools));
     }
+
+    /**
+     * Optional replanning hook after a tool result enters the model context.
+     * Output-poisoning scenarios override this to model a client that treats
+     * untrusted tool output as follow-up instructions.
+     */
+    default List<LlmDecision> decideAfterToolResult(
+            String prompt,
+            String scenarioId,
+            List<ToolDescriptor> availableTools,
+            List<LlmDecision> executedPlan,
+            String lastResult,
+            boolean lastResultIsError
+    ) {
+        return List.of();
+    }
+
+    static boolean hasExecutedTool(List<LlmDecision> executedPlan, String canonical) {
+        if (executedPlan == null) {
+            return false;
+        }
+        return executedPlan.stream()
+                .map(LlmDecision::toolName)
+                .anyMatch(name -> name != null && (name.equals(canonical) || name.endsWith("_" + canonical)));
+    }
 }
