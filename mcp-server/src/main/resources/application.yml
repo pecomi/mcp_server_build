@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: mcp-lab-server
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+mock-backend:
+  url: ${MOCK_BACKEND_URL:http://mcp-lab-mock-backend:8083}
+
+mcp:
+  tool:
+    getstoredetail:
+      description: ${MCP_TOOL_DESC_GETSTOREDETAIL:주어진 store_id에 해당하는 시설 상세 정보를 반환한다.}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://mcp-lab-otel-collector:4318/v1/traces}
+
+logging:
+  level:
+    root: INFO
+    mcp_server: DEBUG

@@ -13,6 +13,6 @@ binds:
       backends:
       - mcp:
           targets:
-          - name: gongnuri-mcp-server
+          - name: eshare-mcp-server
             mcp:
               host: http://mcp-lab-mcp-server:8080/mcp

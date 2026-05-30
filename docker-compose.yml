@@ -1,6 +1,206 @@
 services:
+
   redis:
     image: redis:8.6
     container_name: mcp-lab-redis
     ports:
       - "6379:6379"
+    networks:
+      - lab-internal
+    restart: unless-stopped
+
+  mock-backend:
+    build: ./mock-backend
+    image: mcp-lab-mock-backend:local
+    container_name: mcp-lab-mock-backend
+    ports:
+      - "8083:8083"
+    environment:
+      BT_BACKEND_AUTHZ_ENABLED: ${BT_BACKEND_AUTHZ_ENABLED:-false}
+    networks:
+      - lab-internal
+    restart: unless-stopped
+
+  mcp-server:
+    build: ./mcp-server
+    image: mcp-lab-server:local
+    container_name: mcp-lab-mcp-server
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATA_REDIS_HOST: mcp-lab-redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      REDIS_HOST: mcp-lab-redis
+      REDIS_PORT: "6379"
+      MOCK_BACKEND_URL: http://mcp-lab-mock-backend:8083
+    networks:
+      - lab-internal
+    depends_on:
+      - redis
+      - mock-backend
+    restart: unless-stopped
+
+  fs-server:
+    build: ./fs-server
+    image: mcp-lab-fs-server:local
+    container_name: mcp-lab-fs-server
+    ports:
+      - "8084:8084"
+    networks:
+      - lab-internal
+    restart: unless-stopped
+
+  research-server:
+    build: ./research-server
+    image: mcp-lab-research-server:local
+    container_name: mcp-lab-research-server
+    ports:
+      - "8086:8086"
+    networks:
+      - lab-internal
+    restart: unless-stopped
+
+  gateway:
+    image: ghcr.io/agentgateway/agentgateway:v1.0.1
+    container_name: mcp-lab-gateway
+    command: ["-f", "/config/agentgateway.local.yaml"]
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./agentgateway:/config:ro
+    networks:
+      - lab-public
+      - lab-internal
+    depends_on:
+      - mcp-server
+      - fs-server
+      - research-server
+    restart: unless-stopped
+
+  host:
+    build: ./mcp-lab-host
+    image: mcp-lab-host:local
+    container_name: mcp-lab-host
+    ports:
+      - "8085:8085"
+    environment:
+      LLM_MODE: ${LLM_MODE:-mock}
+      MCP_SERVER_URL: http://mcp-lab-gateway:8081/mcp
+      MCP_API_KEY: local-redteam-key
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+    networks:
+      - lab-public
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  scanner:
+    build: ./scanner
+    image: mcp-lab-scanner:local
+    container_name: mcp-lab-scanner
+    ports:
+      - "8087:8087"
+    environment:
+      SCANNER_DEFAULT_TARGET: http://mcp-lab-gateway:8081/mcp
+      SCANNER_DEFAULT_API_KEY: local-redteam-key
+    networks:
+      - lab-internal
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.11.0
+    container_name: mcp-lab-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - lab-internal
+      - lab-public
+    depends_on:
+      - mock-backend
+      - mcp-server
+      - fs-server
+      - research-server
+      - host
+      - scanner
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.4.2
+    container_name: mcp-lab-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - lab-internal
+      - lab-public
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    container_name: mcp-lab-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+    networks:
+      - lab-internal
+      - lab-public
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.149.0
+    container_name: mcp-lab-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    networks:
+      - lab-internal
+      - lab-public
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+
+  demo:
+    build:
+      context: ./web-demo
+      dockerfile: Dockerfile
+    image: mcp-lab-demo:local
+    container_name: mcp-lab-demo
+    ports:
+      - "8090:8090"
+    environment:
+      HOST_URL: http://mcp-lab-host:8085
+      JAEGER_URL: http://mcp-lab-jaeger:16686
+      SCANNER_URL: http://mcp-lab-scanner:8087
+    networks:
+      - lab-internal
+      - lab-public
+    depends_on:
+      - host
+      - jaeger
+      - scanner
+    restart: unless-stopped
+
+networks:
+  lab-internal:
+    external: true
+    name: mcp-lab-net
+  lab-public:
+    name: mcp-lab-public

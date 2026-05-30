@@ -21,9 +21,15 @@ binds:
       backends:
       - mcp:
           targets:
-          - name: gongnuri-mcp-server
+          - name: eshare-mcp-server
             mcp:
               host: http://mcp-lab-mcp-server:8080/mcp
+          - name: fs-server
+            mcp:
+              host: http://mcp-lab-fs-server:8084/mcp
+          - name: research-server
+            mcp:
+              host: http://mcp-lab-research-server:8086/mcp
 
     - name: mcp-missing-api-key
       matches:

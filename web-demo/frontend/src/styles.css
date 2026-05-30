@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans CJK KR', sans-serif;
+    font-weight: 600;
+    color: #bc0f1d;
+    background: #ffffff;
+  }
+  body { margin: 0; }
+  h1, h2, h3, h4, h5 { font-weight: 900; }
+  code, pre, .mono { font-family: 'Pretendard', ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 500; }
+}
