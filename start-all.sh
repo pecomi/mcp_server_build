@@ -7,7 +7,7 @@ START_TIME=$SECONDS
 MAX_WAIT="${MAX_WAIT:-180}"
 
 echo "[1/3] docker compose up -d --build"
-docker compose up -d --build
+docker-compose up -d --build
 
 echo
 echo "[2/3] seeding Redis API keys"

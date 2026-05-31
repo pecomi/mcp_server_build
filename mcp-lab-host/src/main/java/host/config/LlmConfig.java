@@ -3,6 +3,7 @@ package host.config;
 import host.llm.CrossServerPoisonedMockLlmClient;
 import host.llm.LlmClient;
 import host.llm.MockLlmClient;
+import host.llm.OutputPoisonedMockLlmClient;
 import host.llm.PoisonedMockLlmClient;
 import host.llm.RealLlmClient;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,7 @@ public class LlmConfig {
             case "mock" -> new MockLlmClient();
             case "mock_poisoned" -> new PoisonedMockLlmClient();
             case "mock_cross_poisoned" -> new CrossServerPoisonedMockLlmClient();
+            case "mock_output_poisoned" -> new OutputPoisonedMockLlmClient();
             case "real_deterministic" -> new RealLlmClient(restClientBuilder, anthropicApiKey, anthropicModel, anthropicUrl);
             default -> throw new IllegalStateException("Unknown LLM_MODE: " + mode);
         };

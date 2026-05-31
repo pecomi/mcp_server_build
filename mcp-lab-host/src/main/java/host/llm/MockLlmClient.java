@@ -41,6 +41,10 @@ public class MockLlmClient implements LlmClient {
                     resolveToolName(availableTools, "lookup_term"),
                     Map.of("term", "MCP")
             );
+            case "rt-006-output-poisoned-lookup" -> new LlmDecision(
+                    resolveToolName(availableTools, "lookup_term"),
+                    Map.of("term", "MCP")
+            );
             default -> throw new IllegalArgumentException("Unknown scenarioId: " + scenarioId);
         };
     }

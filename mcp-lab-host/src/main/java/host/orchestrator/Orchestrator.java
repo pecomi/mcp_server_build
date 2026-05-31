@@ -42,11 +42,14 @@ public class Orchestrator {
         List<ToolDescriptor> tools = mcp.listTools(sessionId);
         log.info("tools listed: {} entries", tools.size());
 
-        List<LlmDecision> plan = llm.decideMultiStep(request.prompt(), request.scenarioId(), tools);
+        List<LlmDecision> plan = new ArrayList<>(
+                llm.decideMultiStep(request.prompt(), request.scenarioId(), tools)
+        );
         log.info("llm plan size={}", plan.size());
 
         List<ToolCallSummary> summaries = new ArrayList<>();
         StringBuilder finalTextBuilder = new StringBuilder();
+        List<LlmDecision> executedPlan = new ArrayList<>();
 
         for (int i = 0; i < plan.size(); i++) {
             LlmDecision decision = plan.get(i);
@@ -69,6 +72,20 @@ public class Orchestrator {
                         .append(" error: ").append(result.textContent());
             } else {
                 finalTextBuilder.append(result.textContent());
+            }
+
+            executedPlan.add(decision);
+            List<LlmDecision> followUps = llm.decideAfterToolResult(
+                    request.prompt(),
+                    request.scenarioId(),
+                    tools,
+                    List.copyOf(executedPlan),
+                    result.textContent(),
+                    result.isError()
+            );
+            if (!followUps.isEmpty()) {
+                log.warn("llm added {} follow-up step(s) after tool output", followUps.size());
+                plan.addAll(followUps);
             }
         }
 

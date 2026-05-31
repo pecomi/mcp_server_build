@@ -65,6 +65,11 @@
 - `mcp-lab-scanner` (port 8087). gateway federated `tools/list` 일괄 분석. 2 룰 (`DESC_INJECT` sentinel 패턴 / `ARG_NO_PATTERN` 보안-민감 string args의 pattern/enum 부재). Finding JSON 보고.
 - **검증**: `bash scripts/verify-m9.sh` → 4/4 PASS.
 
+### RT-006 Stage 1 — Tool-Output Prompt Injection
+
+- `research-server.lookup_term` description은 정상으로 두고, 반환되는 tool output 뒤에 `read_file('/etc/passwd')` follow-up instruction을 주입. `OutputPoisonedMockLlmClient`가 tool result를 다음 planning context로 신뢰하면 `fs-server.read_file` 후속 호출이 발생. 보고서: [`docs/RT-006.md`](docs/RT-006.md).
+- **검증**: `bash scripts/rt-006-stage1.sh` → case 3에서 `root:x:0` 노출 기대.
+
 ### M10 / BT-001 — Backend Authz on Restricted Rows 
 
 - `mock-backend.PublicStoreController`에 `BT_BACKEND_AUTHZ_ENABLED=true` 시 restricted=true row → 403 `RESTRICTED`. RT-002 sink leg 차단. 보고서: [`docs/BT-001.md`](docs/BT-001.md).
@@ -118,6 +123,7 @@ bash scripts/verify-m0p.sh
 | [SCENARIOS.md](docs/SCENARIOS.md) | host 시나리오 카탈로그 + 추가 방법 |
 | [RT-002.md](docs/RT-002.md) | RT-002 Stage 1 보고서 (single-server description poisoning × IDOR) |
 | [RT-003.md](docs/RT-003.md) | RT-003 Stage 1 보고서 — cross-server description injection × `/etc/passwd` exfil |
+| [RT-006.md](docs/RT-006.md) | RT-006 Stage 1 보고서 — tool-output prompt injection × intent flow subversion |
 | [BT-001.md](docs/BT-001.md) | BT-001 보고서 — backend authz on restricted rows |
 
 ---
