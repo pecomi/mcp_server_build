@@ -6,8 +6,25 @@ cd "$(dirname "$0")"
 START_TIME=$SECONDS
 MAX_WAIT="${MAX_WAIT:-180}"
 
-echo "[1/3] docker compose up -d --build"
-docker-compose up -d --build
+# Portable compose: prefer v2 plugin ("docker compose"), fall back to v1 binary.
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE="docker-compose"
+else
+    echo "ERROR: neither 'docker compose' nor 'docker-compose' is available." >&2
+    exit 1
+fi
+
+# compose declares lab-internal as an external network (mcp-lab-net); create it
+# if missing so the stack is self-contained on a fresh machine.
+if ! docker network inspect mcp-lab-net >/dev/null 2>&1; then
+    echo "[0/3] creating external network mcp-lab-net"
+    docker network create mcp-lab-net >/dev/null
+fi
+
+echo "[1/3] $COMPOSE up -d --build"
+$COMPOSE up -d --build
 
 echo
 echo "[2/3] seeding Redis API keys"
@@ -44,7 +61,7 @@ while [[ $WAITED -lt $MAX_WAIT ]]; do
         echo
         echo "Stack is up (mock=$MOCK mcp=$MCP fs=$FS research=$RES host=$HOST scanner=$SCAN prom=$PROM grafana=$GRAF jaeger=$JAEG otel=$OTEL demo=$DEMO) — total ${ELAPSED}s"
         echo
-        docker compose ps
+        ${COMPOSE:-docker compose} ps
         exit 0
     fi
     printf '.'
@@ -54,7 +71,7 @@ done
 
 echo
 echo "Timed out after ${MAX_WAIT}s. Current state:"
-docker compose ps
+${COMPOSE:-docker compose} ps
 echo
 echo "Tail last 30 lines of each service:"
 for svc in mcp-lab-mcp-server mcp-lab-mock-backend mcp-lab-fs-server mcp-lab-research-server mcp-lab-scanner mcp-lab-host mcp-lab-gateway mcp-lab-redis mcp-lab-prometheus mcp-lab-grafana mcp-lab-jaeger mcp-lab-otel-collector mcp-lab-demo; do

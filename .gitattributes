@@ -1,0 +1,9 @@
+# Shell scripts must stay LF — they run in WSL/Linux/Docker where CRLF breaks
+# the shebang and `set -o pipefail` (causes: "invalid option name set: pipefail").
+*.sh    text eol=lf
+gradlew text eol=lf
+
+# Windows-only files keep CRLF
+*.bat   text eol=crlf
+
+*.jar   binary
